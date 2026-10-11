@@ -1,184 +1,135 @@
 import React from 'react';
-import { 
-  SlidersHorizontal, 
-  Activity, 
-  TrendingUp, 
-  GitBranch, 
-  FileText, 
-  FolderKanban, 
-  BookOpen, 
-  ChevronsUpDown
-} from 'lucide-react';
-import { ActiveView } from '../types/riskEngine';
 
 interface SidebarProps {
-  activeView: ActiveView;
-  setActiveView: (view: ActiveView) => void;
-  isCollapsed: boolean;
-  setIsCollapsed: (val: boolean) => void;
-  onOpenPresets: () => void;
-  onOpenAudit: () => void;
+  activeScreen: 'intake' | 'analytics';
+  onNavigate: (screen: 'intake' | 'analytics') => void;
   onOpenDocs: () => void;
+  onOpenSimulator: () => void;
+  mobileMenuOpen: boolean;
+  onCloseMobileMenu: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  activeView,
-  setActiveView,
-  isCollapsed,
-  setIsCollapsed,
-  onOpenPresets,
-  onOpenAudit,
+  activeScreen,
+  onNavigate,
   onOpenDocs,
+  onOpenSimulator,
+  mobileMenuOpen,
+  onCloseMobileMenu,
 }) => {
-  return (
-    <aside 
-      className={`bg-[#0a0f16] border-r border-[#192433] flex flex-col justify-between transition-all duration-200 z-20 shrink-0 ${
-        isCollapsed ? 'w-16' : 'w-64'
-      }`}
-    >
-      <div className="flex flex-col">
-        {/* Sidebar Header: Parameter Controls */}
-        <div className="h-12 border-b border-[#172332] px-4 flex items-center justify-between text-slate-300">
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <SlidersHorizontal className="w-4 h-4 text-emerald-400 shrink-0" />
-            {!isCollapsed && (
-              <span className="text-[11px] font-bold tracking-wider uppercase font-mono text-slate-200 truncate">
-                PARAMETER CONTROLS
-              </span>
-            )}
+  const content = (
+    <div className="flex flex-col justify-between h-full">
+      <div>
+        {/* Sidebar Header */}
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+            <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-[20px]">account_tree</span>
+            <span className="font-display text-[12px] font-bold tracking-wider uppercase text-slate-800 dark:text-slate-100">
+              Underwriting Flow
+            </span>
           </div>
-          <button 
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
-            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          <span className="material-symbols-outlined text-slate-400 text-[18px]">unfold_less</span>
+        </div>
+
+        {/* Pipeline Nav */}
+        <nav className="p-3 space-y-1">
+          <div className="px-3 pt-2 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            Underwriting Pipeline
+          </div>
+
+          <button
+            onClick={() => {
+              onNavigate('intake');
+              onCloseMobileMenu();
+            }}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors text-left ${
+              activeScreen === 'intake'
+                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/60'
+            }`}
           >
-            <ChevronsUpDown className="w-3.5 h-3.5" />
+            <span className="material-symbols-outlined text-[18px]">person_outline</span>
+            <span>Intake &amp; Risk Inputs</span>
           </button>
-        </div>
 
-        {/* Section 1: ANALYSIS CANVAS */}
-        <div className="p-3">
-          {!isCollapsed && (
-            <div className="px-2 pb-2 text-[10px] uppercase font-mono font-semibold tracking-wider text-slate-500">
-              ANALYSIS CANVAS
-            </div>
-          )}
+          <button
+            onClick={() => {
+              onNavigate('analytics');
+              onCloseMobileMenu();
+            }}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors text-left ${
+              activeScreen === 'analytics'
+                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">insights</span>
+            <span>Analytics &amp; Output</span>
+          </button>
 
-          <div className="space-y-1">
-            {/* Scoring Predictor */}
-            <button
-              onClick={() => setActiveView('scoring')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                activeView === 'scoring'
-                  ? 'bg-[#132223] text-emerald-300 border border-emerald-500/30 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-              }`}
-            >
-              <Activity className={`w-4 h-4 shrink-0 ${activeView === 'scoring' ? 'text-emerald-400' : 'text-slate-400'}`} />
-              {!isCollapsed && <span className="truncate">Scoring Predictor</span>}
-            </button>
-
-            {/* Simulations & Stress */}
-            <button
-              onClick={() => setActiveView('simulations')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                activeView === 'simulations'
-                  ? 'bg-[#132223] text-emerald-300 border border-emerald-500/30 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-              }`}
-            >
-              <TrendingUp className={`w-4 h-4 shrink-0 ${activeView === 'simulations' ? 'text-emerald-400' : 'text-slate-400'}`} />
-              {!isCollapsed && <span className="truncate">Simulations & Stress</span>}
-            </button>
-
-            {/* SHAP Factor Map */}
-            <button
-              onClick={() => setActiveView('shapMap')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                activeView === 'shapMap'
-                  ? 'bg-[#132223] text-emerald-300 border border-emerald-500/30 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-              }`}
-            >
-              <GitBranch className={`w-4 h-4 shrink-0 ${activeView === 'shapMap' ? 'text-emerald-400' : 'text-slate-400'}`} />
-              {!isCollapsed && <span className="truncate">SHAP Factor Map</span>}
-            </button>
+          <div className="pt-3 pb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            Analytical Sandbox
           </div>
-        </div>
 
-        {/* Section 2: UNDERWRITING OPERATIONS */}
-        <div className="p-3 pt-1">
-          {!isCollapsed && (
-            <div className="px-2 pb-2 text-[10px] uppercase font-mono font-semibold tracking-wider text-slate-500">
-              UNDERWRITING OPERATIONS
-            </div>
-          )}
+          <button
+            onClick={() => {
+              onOpenSimulator();
+              onCloseMobileMenu();
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/60 text-[13px] font-medium transition-colors text-left"
+          >
+            <span className="material-symbols-outlined text-[18px] text-purple-500">science</span>
+            <span>What-If Simulator</span>
+          </button>
 
-          <div className="space-y-1">
-            {/* Audit Log */}
-            <button
-              onClick={onOpenAudit}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                activeView === 'auditLog'
-                  ? 'bg-[#132223] text-emerald-300 border border-emerald-500/30'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-              }`}
-            >
-              <FileText className={`w-4 h-4 shrink-0 ${activeView === 'auditLog' ? 'text-emerald-400' : 'text-slate-400'}`} />
-              {!isCollapsed && <span className="truncate">Audit Log</span>}
-            </button>
-
-            {/* Preset Profiles */}
-            <button
-              onClick={onOpenPresets}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                activeView === 'presets'
-                  ? 'bg-[#132223] text-emerald-300 border border-emerald-500/30'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-              }`}
-            >
-              <FolderKanban className={`w-4 h-4 shrink-0 ${activeView === 'presets' ? 'text-emerald-400' : 'text-slate-400'}`} />
-              {!isCollapsed && <span className="truncate">Preset Profiles</span>}
-            </button>
-
-            {/* Documentation */}
-            <button
-              onClick={onOpenDocs}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                activeView === 'docs'
-                  ? 'bg-[#132223] text-emerald-300 border border-emerald-500/30'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-              }`}
-            >
-              <BookOpen className={`w-4 h-4 shrink-0 ${activeView === 'docs' ? 'text-emerald-400' : 'text-slate-400'}`} />
-              {!isCollapsed && <span className="truncate">Documentation</span>}
-            </button>
-          </div>
-        </div>
+          <button
+            onClick={() => {
+              onOpenDocs();
+              onCloseMobileMenu();
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/60 text-[13px] font-medium transition-colors text-left"
+          >
+            <span className="material-symbols-outlined text-[18px] text-emerald-500">auto_stories</span>
+            <span>Model Documentation</span>
+          </button>
+        </nav>
       </div>
 
-      {/* Inference Node footer info */}
-      <div className="p-3 border-t border-[#172332] bg-[#090d13]">
-        {!isCollapsed ? (
-          <div className="flex items-center justify-between text-[11px] font-mono">
-            <div className="flex flex-col">
-              <span className="text-slate-500 text-[10px]">Inference Node</span>
-              <span className="text-emerald-400 font-semibold">us-east-quants-09</span>
-            </div>
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-          </div>
-        ) : (
-          <div className="flex justify-center" title="Inference Node: us-east-quants-09 (Active)">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-            </span>
-          </div>
-        )}
+      {/* Bottom Node Meta */}
+      <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 flex items-center justify-between">
+        <div className="flex flex-col">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">Inference Node</span>
+          <span className="font-mono text-[11px] font-medium text-slate-800 dark:text-slate-200">
+            us-east-quants-09
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5" title="Node Online: Latency < 42ms">
+          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-medium">99.98%</span>
+        </div>
       </div>
-    </aside>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop Persistent Sidebar */}
+      <aside className="hidden lg:flex fixed left-0 top-16 bottom-0 w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-40 flex-col justify-between transition-colors">
+        {content}
+      </aside>
+
+      {/* Mobile Drawer Overlay */}
+      {mobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity"
+            onClick={onCloseMobileMenu}
+          />
+          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 pt-16 z-10 shadow-2xl">
+            {content}
+          </div>
+        </div>
+      )}
+    </>
   );
 };

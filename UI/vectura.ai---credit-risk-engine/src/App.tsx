@@ -1,215 +1,218 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
-import { Subheader } from './components/Subheader';
-import { RiskVectorInputs } from './components/RiskVectorInputs';
-import { AlgorithmicOutcome } from './components/AlgorithmicOutcome';
-import { ShapAttribution } from './components/ShapAttribution';
-import { RiskMemoModal } from './components/RiskMemoModal';
-import { PresetProfilesModal } from './components/PresetProfilesModal';
+import { IntakeScreen } from './components/IntakeScreen';
+import { AnalyticsScreen } from './components/AnalyticsScreen';
+import { PreferencesModal } from './components/PreferencesModal';
 import { DocumentationModal } from './components/DocumentationModal';
-import { AuditLogView } from './components/AuditLogView';
-import { SimulationsView } from './components/SimulationsView';
-import { ShapMapView } from './components/ShapMapView';
-import { 
-  DEFAULT_RISK_INPUTS, 
-  computeInference, 
-} from './utils/creditModel';
-import { RiskVectorInputs as InputsType, InferenceOutcome, ActiveView } from './types/riskEngine';
+import { OverrideModal } from './components/OverrideModal';
+import { OfferModal } from './components/OfferModal';
+import { WhatIfSimulatorModal } from './components/WhatIfSimulatorModal';
+import { ExportMemoModal } from './components/ExportMemoModal';
+import {
+  loadUserPreferences,
+  saveUserPreferences,
+  loadApplicantProfile,
+  saveApplicantProfile,
+  DEFAULT_PREFERENCES,
+} from './utils/storage';
+import { calculateCreditRisk } from './utils/riskEngine';
+import { ApplicantProfile, UserPreferences } from './types/underwriting';
 
 export default function App() {
-  const [inputs, setInputs] = useState<InputsType>({ ...DEFAULT_RISK_INPUTS });
-  const [dossierId, setDossierId] = useState<string>('APP-2024-8849-DE');
-  const [outcome, setOutcome] = useState<InferenceOutcome>({
-    dossierId: 'LOADING',
-    goodCreditProbability: 0,
-    decisionStatus: 'MANUAL_REVIEW',
-    statusLabel: 'LOADING...',
-    threshold: 65.0,
-    deterministicSeed: 'WAIT',
-    lgdEstimate: 0,
-    auditBlock: 0,
-    scoreEquivalent: 0,
-    scoreDelta: 0,
-    scoreTier: 'WAIT',
-    recommendedMaxLimit: 0,
-    limitBuffer: 0,
-    expectedLossRate: 0,
-    lossRateDelta: 0,
-    lossRateCap: 2.5,
-    inferenceConfidence: 0,
-    varianceSigma: 0,
-    shapFactors: [],
-    counterfactualAdvice: { title: 'Loading', actionableText: 'Loading inference from FastAPI...', potentialScore: 0, potentialLimit: 0 },
-    inferredAt: 'Loading...'
-  } as InferenceOutcome);
+  const [activeScreen, setActiveScreen] = useState<'intake' | 'analytics'>('intake');
+  const [preferences, setPreferences] = useState<UserPreferences>(() => loadUserPreferences());
+  const [profile, setProfile] = useState<ApplicantProfile>(() => loadApplicantProfile());
+  const [isSigned, setIsSigned] = useState<boolean>(false);
+  const [signedTime, setSignedTime] = useState<string | undefined>();
+  const [overrideData, setOverrideData] = useState<{ forcedTier: string; notes: string } | null>(null);
+
+  // Modals state
+  const [showPreferences, setShowPreferences] = useState(false);
+  const [showDocs, setShowDocs] = useState(false);
+  const [showOverride, setShowOverride] = useState(false);
+  const [showOffer, setShowOffer] = useState(false);
+  const [showSimulator, setShowSimulator] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Apply dark mode on mount and preference changes
   useEffect(() => {
-    computeInference(DEFAULT_RISK_INPUTS, 'APP-2024-8849-DE').then(setOutcome);
-  }, []);
-  const [isRecalculating, setIsRecalculating] = useState<boolean>(false);
-  const [lastInferredText, setLastInferredText] = useState<string>('Just now');
-  
-  // Navigation & Modals state
-  const [activeView, setActiveView] = useState<ActiveView>('scoring');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
-  const [showRiskMemo, setShowRiskMemo] = useState<boolean>(false);
-  const [showPresetsModal, setShowPresetsModal] = useState<boolean>(false);
-  const [showDocsModal, setShowDocsModal] = useState<boolean>(false);
+    if (preferences.darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [preferences.darkMode]);
 
-  // Recalculate handler with realistic sub-second computing state
-  const handleRecalculate = async () => {
-    setIsRecalculating(true);
-    const newOutcome = await computeInference(inputs, dossierId);
-    setOutcome(newOutcome);
-    setIsRecalculating(false);
-    setLastInferredText('Just now');
+  // Save profile changes to localStorage
+  const handleProfileChange = (newProfile: ApplicantProfile) => {
+    setProfile(newProfile);
+    saveApplicantProfile(newProfile);
+    // Reset override on parameter change
+    setOverrideData(null);
   };
 
-  // Revert defaults to exact screenshot state
-  const handleRevertDefaults = async () => {
-    setInputs({ ...DEFAULT_RISK_INPUTS });
-    setDossierId('APP-2024-8849-DE');
-    const freshOutcome = await computeInference(DEFAULT_RISK_INPUTS, 'APP-2024-8849-DE');
-    setOutcome(freshOutcome);
-    setLastInferredText('Just now');
+  // Save preferences changes to localStorage
+  const handleSavePreferences = (newPrefs: UserPreferences) => {
+    setPreferences(newPrefs);
+    saveUserPreferences(newPrefs);
   };
 
-  // Load a preset profile
-  const handleLoadPreset = async (presetInputs: InputsType, newDossierId: string) => {
-    setInputs({ ...presetInputs });
-    setDossierId(newDossierId);
-    const newOutcome = await computeInference(presetInputs, newDossierId);
-    setOutcome(newOutcome);
-    setActiveView('scoring');
-    setLastInferredText('Just now');
+  const handleResetPreferences = () => {
+    handleSavePreferences({ ...DEFAULT_PREFERENCES });
   };
 
-  // Apply counterfactual recommendation
-  const handleApplyCounterfactual = async () => {
-    // Upgrading checking account to >= 200 DM as advised in counterfactual
-    const updatedInputs: InputsType = {
-      ...inputs,
-      checkingAccount: '>= 200 DM (Healthy Liquidity)',
-    };
-    setInputs(updatedInputs);
-    const updatedOutcome = await computeInference(updatedInputs, dossierId);
-    setOutcome(updatedOutcome);
-    setLastInferredText('Just now');
+  // Calculate inference results
+  const baseInferenceResult = useMemo(() => {
+    const res = calculateCreditRisk(
+      profile,
+      preferences.isGuest
+        ? 'Guest Tester (Testing Mode)'
+        : `${preferences.underwriterName} (${preferences.underwriterRole}, ID #4829)`
+    );
+
+    // Apply digital signature state if affixed
+    if (isSigned) {
+      res.auditTrail.isSigned = true;
+      res.auditTrail.signedTimestamp = signedTime;
+    }
+
+    // Apply manual override if committed
+    if (overrideData) {
+      res.tier = overrideData.forcedTier;
+      res.statusBadge = overrideData.forcedTier.includes('Approval')
+        ? 'Manual Override Approved'
+        : 'Manual Override Declined';
+      res.verdict = `Verdict: Manual Exception (${overrideData.forcedTier})`;
+    }
+
+    return res;
+  }, [profile, preferences, isSigned, signedTime, overrideData]);
+
+  // Digital Signature action
+  const handleAffixSignature = () => {
+    const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
+    setIsSigned(true);
+    setSignedTime(timestamp);
+  };
+
+  // Handle manual override
+  const handleConfirmOverride = (forcedTier: string, notes: string) => {
+    setOverrideData({ forcedTier, notes });
+    setShowOverride(false);
   };
 
   return (
-    <div className="min-h-screen bg-[#0b1016] text-[#e2e8f0] flex flex-col font-sans selection:bg-emerald-500/20 selection:text-emerald-300">
+    <div className="min-h-screen bg-[#f8f9ff] dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-body transition-colors selection:bg-blue-600/15 selection:text-blue-600">
       {/* Top Header */}
       <Header
-        activeView={activeView}
-        setActiveView={setActiveView}
-        onOpenPresets={() => setShowPresetsModal(true)}
-        onOpenAudit={() => setActiveView('auditLog')}
-        onOpenDocs={() => setShowDocsModal(true)}
+        activeScreen={activeScreen}
+        onNavigate={(screen) => setActiveScreen(screen)}
+        preferences={preferences}
+        onOpenPreferences={() => setShowPreferences(true)}
+        onOpenDocs={() => setShowDocs(true)}
+        onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
+        mobileMenuOpen={mobileMenuOpen}
       />
 
-      {/* Main Workspace */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar */}
-        <Sidebar
-          activeView={activeView}
-          setActiveView={setActiveView}
-          isCollapsed={isSidebarCollapsed}
-          setIsCollapsed={setIsSidebarCollapsed}
-          onOpenPresets={() => setShowPresetsModal(true)}
-          onOpenAudit={() => setActiveView('auditLog')}
-          onOpenDocs={() => setShowDocsModal(true)}
-        />
+      {/* Left Sidebar */}
+      <Sidebar
+        activeScreen={activeScreen}
+        onNavigate={(screen) => setActiveScreen(screen)}
+        onOpenDocs={() => setShowDocs(true)}
+        onOpenSimulator={() => setShowSimulator(true)}
+        mobileMenuOpen={mobileMenuOpen}
+        onCloseMobileMenu={() => setMobileMenuOpen(false)}
+      />
 
-        {/* Center Content Canvas */}
-        <main className="flex-1 overflow-y-auto bg-[#0a0f16]">
-          {activeView === 'scoring' && (
-            <div className="flex flex-col min-h-full">
-              {/* Target Dossier Subheader */}
-              <Subheader
-                dossierId={dossierId}
-                onRevertDefaults={handleRevertDefaults}
-                onExportMemo={() => setShowRiskMemo(true)}
-                lastInferredText={lastInferredText}
-              />
-
-              {/* Scoring Predictor Layout Grid */}
-              <div className="p-4 md:p-6 max-w-7xl mx-auto w-full grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-                {/* Left Column: Risk Vector Inputs (approx 4.5 cols on xl) */}
-                <div className="xl:col-span-4 lg:col-span-5 w-full">
-                  <RiskVectorInputs
-                    inputs={inputs}
-                    onChange={async (newInputs) => {
-                      setInputs(newInputs);
-                      // Live recalculation
-                      const newOutcome = await computeInference(newInputs, dossierId);
-                      setOutcome(newOutcome);
-                    }}
-                    onRecalculate={handleRecalculate}
-                    isRecalculating={isRecalculating}
-                  />
+      {/* Main Content Area */}
+      <div className="lg:pl-64">
+        <main className="pt-16 min-h-screen w-full px-4 sm:px-6 lg:px-8 py-6">
+          <div className="max-w-7xl mx-auto">
+            {/* Guest Access Banner Notice if in Guest Mode */}
+            {preferences.isGuest && (
+              <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center justify-between text-xs text-amber-800 dark:text-amber-300">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px]">verified_user</span>
+                  <span>
+                    <strong>Guest Access Active:</strong> Full testing mode enabled. All model vectors, inference simulations, and decision analytics are unrestricted.
+                  </span>
                 </div>
-
-                {/* Right Column: Algorithmic Outcome & Explainable AI (approx 7.5 cols on xl) */}
-                <div className="xl:col-span-8 lg:col-span-7 flex flex-col gap-6 w-full">
-                  {/* Algorithmic Outcome Box */}
-                  <AlgorithmicOutcome outcome={outcome} />
-
-                  {/* Explainable AI (SHAP) Factor Attribution Box */}
-                  <ShapAttribution
-                    factors={outcome.shapFactors}
-                    counterfactual={outcome.counterfactualAdvice}
-                    onApplyCounterfactual={handleApplyCounterfactual}
-                  />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPreferences(true)}
+                  className="font-semibold text-amber-900 dark:text-amber-200 underline hover:text-amber-700"
+                >
+                  Configure Identity
+                </button>
               </div>
-            </div>
-          )}
+            )}
 
-          {activeView === 'simulations' && (
-            <SimulationsView
-              onBack={() => setActiveView('scoring')}
-              inputs={inputs}
-              outcome={outcome}
-            />
-          )}
-
-          {activeView === 'shapMap' && (
-            <ShapMapView
-              onBack={() => setActiveView('scoring')}
-              outcome={outcome}
-            />
-          )}
-
-          {activeView === 'auditLog' && (
-            <AuditLogView
-              onBack={() => setActiveView('scoring')}
-              currentDossierId={dossierId}
-            />
-          )}
+            {/* Screen Switching */}
+            {activeScreen === 'intake' ? (
+              <IntakeScreen
+                profile={profile}
+                onChangeProfile={handleProfileChange}
+                onRunInference={() => setActiveScreen('analytics')}
+              />
+            ) : (
+              <AnalyticsScreen
+                profile={profile}
+                result={baseInferenceResult}
+                onAdjustInputs={() => setActiveScreen('intake')}
+                onOpenOverride={() => setShowOverride(true)}
+                onOpenOffer={() => setShowOffer(true)}
+                onOpenSimulator={() => setShowSimulator(true)}
+                onAffixSignature={handleAffixSignature}
+                onExportMemo={() => setShowExport(true)}
+              />
+            )}
+          </div>
         </main>
       </div>
 
-      {/* Risk Memo Export Modal */}
-      <RiskMemoModal
-        isOpen={showRiskMemo}
-        onClose={() => setShowRiskMemo(false)}
-        inputs={inputs}
-        outcome={outcome}
+      {/* Modals & Dialogs */}
+      <PreferencesModal
+        isOpen={showPreferences}
+        onClose={() => setShowPreferences(false)}
+        preferences={preferences}
+        onSavePreferences={handleSavePreferences}
+        onResetPreferences={handleResetPreferences}
       />
 
-      {/* Preset Profiles Modal */}
-      <PresetProfilesModal
-        isOpen={showPresetsModal}
-        onClose={() => setShowPresetsModal(false)}
-        onSelectProfile={handleLoadPreset}
-        currentDossierId={dossierId}
-      />
-
-      {/* Documentation Modal */}
       <DocumentationModal
-        isOpen={showDocsModal}
-        onClose={() => setShowDocsModal(false)}
+        isOpen={showDocs}
+        onClose={() => setShowDocs(false)}
+      />
+
+      <OverrideModal
+        isOpen={showOverride}
+        onClose={() => setShowOverride(false)}
+        profile={profile}
+        result={baseInferenceResult}
+        onConfirmOverride={handleConfirmOverride}
+      />
+
+      <OfferModal
+        isOpen={showOffer}
+        onClose={() => setShowOffer(false)}
+        profile={profile}
+        result={baseInferenceResult}
+      />
+
+      <WhatIfSimulatorModal
+        isOpen={showSimulator}
+        onClose={() => setShowSimulator(false)}
+        profile={profile}
+        onApplyProfile={handleProfileChange}
+      />
+
+      <ExportMemoModal
+        isOpen={showExport}
+        onClose={() => setShowExport(false)}
+        profile={profile}
+        result={baseInferenceResult}
       />
     </div>
   );

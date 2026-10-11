@@ -1,6 +1,7 @@
 {
-  "name": "VECTURA.AI - Credit Risk Engine",
-  "description": "Explainable AI credit risk scoring and algorithmic underwriting platform with Basel III compliance and SHAP factor attribution.",
+  "name": "Vectura.ai - Credit Risk Engine",
+  "description": "Institutional credit risk engine for applicant intake, quantitative risk inference, SHAP factor attribution, and regulatory underwriting analytics.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
+
