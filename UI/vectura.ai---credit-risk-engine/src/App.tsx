@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { IntakeScreen } from './components/IntakeScreen';
@@ -16,8 +16,8 @@ import {
   saveApplicantProfile,
   DEFAULT_PREFERENCES,
 } from './utils/storage';
-import { calculateCreditRisk } from './utils/riskEngine';
-import { ApplicantProfile, UserPreferences } from './types/underwriting';
+import { calculateCreditRisk, fetchCreditRiskInference } from './utils/riskEngine';
+import { ApplicantProfile, UserPreferences, InferenceResult } from './types/underwriting';
 
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<'intake' | 'analytics'>('intake');
@@ -26,6 +26,12 @@ export default function App() {
   const [isSigned, setIsSigned] = useState<boolean>(false);
   const [signedTime, setSignedTime] = useState<string | undefined>();
   const [overrideData, setOverrideData] = useState<{ forcedTier: string; notes: string } | null>(null);
+
+  // Active inference result state (initialized with synchronous local baseline)
+  const [inferenceResult, setInferenceResult] = useState<InferenceResult>(() =>
+    calculateCreditRisk(profile, 'E. Vance (Sr. Credit Officer, ID #4829)')
+  );
+  const [isInferencing, setIsInferencing] = useState<boolean>(false);
 
   // Modals state
   const [showPreferences, setShowPreferences] = useState(false);
@@ -45,12 +51,59 @@ export default function App() {
     }
   }, [preferences.darkMode]);
 
-  // Save profile changes to localStorage
+  // Request inference from live backend or local calculation
+  const triggerInference = useCallback(async (applicantProfile: ApplicantProfile) => {
+    setIsInferencing(true);
+    const underwriter = preferences.isGuest
+      ? 'Guest Tester (Testing Mode)'
+      : `${preferences.underwriterName} (${preferences.underwriterRole}, ID #4829)`;
+
+    try {
+      const res = await fetchCreditRiskInference(applicantProfile, underwriter);
+
+      // Preserve digital signature if affixed
+      if (isSigned) {
+        res.auditTrail.isSigned = true;
+        res.auditTrail.signedTimestamp = signedTime;
+      }
+
+      // Preserve manual override if committed
+      if (overrideData) {
+        res.tier = overrideData.forcedTier;
+        res.statusBadge = overrideData.forcedTier.includes('Approval')
+          ? 'Manual Override Approved'
+          : 'Manual Override Declined';
+        res.verdict = `Verdict: Manual Exception (${overrideData.forcedTier})`;
+      }
+
+      setInferenceResult(res);
+    } catch (err) {
+      console.error('Inference error:', err);
+    } finally {
+      setIsInferencing(false);
+    }
+  }, [preferences, isSigned, signedTime, overrideData]);
+
+  // Trigger inference on initial mount
+  useEffect(() => {
+    triggerInference(profile);
+  }, []);
+
+  // Save profile changes to localStorage and trigger recalculation if autoCalculate is on
   const handleProfileChange = (newProfile: ApplicantProfile) => {
     setProfile(newProfile);
     saveApplicantProfile(newProfile);
-    // Reset override on parameter change
-    setOverrideData(null);
+    setOverrideData(null); // Reset override on parameter change
+
+    if (preferences.autoCalculate) {
+      triggerInference(newProfile);
+    }
+  };
+
+  // Explicit calculation button on Intake screen
+  const handleRunInference = async () => {
+    await triggerInference(profile);
+    setActiveScreen('analytics');
   };
 
   // Save preferences changes to localStorage
@@ -63,43 +116,32 @@ export default function App() {
     handleSavePreferences({ ...DEFAULT_PREFERENCES });
   };
 
-  // Calculate inference results
-  const baseInferenceResult = useMemo(() => {
-    const res = calculateCreditRisk(
-      profile,
-      preferences.isGuest
-        ? 'Guest Tester (Testing Mode)'
-        : `${preferences.underwriterName} (${preferences.underwriterRole}, ID #4829)`
-    );
-
-    // Apply digital signature state if affixed
-    if (isSigned) {
-      res.auditTrail.isSigned = true;
-      res.auditTrail.signedTimestamp = signedTime;
-    }
-
-    // Apply manual override if committed
-    if (overrideData) {
-      res.tier = overrideData.forcedTier;
-      res.statusBadge = overrideData.forcedTier.includes('Approval')
-        ? 'Manual Override Approved'
-        : 'Manual Override Declined';
-      res.verdict = `Verdict: Manual Exception (${overrideData.forcedTier})`;
-    }
-
-    return res;
-  }, [profile, preferences, isSigned, signedTime, overrideData]);
-
   // Digital Signature action
   const handleAffixSignature = () => {
     const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
     setIsSigned(true);
     setSignedTime(timestamp);
+    setInferenceResult((prev) => ({
+      ...prev,
+      auditTrail: {
+        ...prev.auditTrail,
+        isSigned: true,
+        signedTimestamp: timestamp,
+      },
+    }));
   };
 
   // Handle manual override
   const handleConfirmOverride = (forcedTier: string, notes: string) => {
     setOverrideData({ forcedTier, notes });
+    setInferenceResult((prev) => ({
+      ...prev,
+      tier: forcedTier,
+      statusBadge: forcedTier.includes('Approval')
+        ? 'Manual Override Approved'
+        : 'Manual Override Declined',
+      verdict: `Verdict: Manual Exception (${forcedTier})`,
+    }));
     setShowOverride(false);
   };
 
@@ -154,12 +196,12 @@ export default function App() {
               <IntakeScreen
                 profile={profile}
                 onChangeProfile={handleProfileChange}
-                onRunInference={() => setActiveScreen('analytics')}
+                onRunInference={handleRunInference}
               />
             ) : (
               <AnalyticsScreen
                 profile={profile}
-                result={baseInferenceResult}
+                result={inferenceResult}
                 onAdjustInputs={() => setActiveScreen('intake')}
                 onOpenOverride={() => setShowOverride(true)}
                 onOpenOffer={() => setShowOffer(true)}
@@ -190,7 +232,7 @@ export default function App() {
         isOpen={showOverride}
         onClose={() => setShowOverride(false)}
         profile={profile}
-        result={baseInferenceResult}
+        result={inferenceResult}
         onConfirmOverride={handleConfirmOverride}
       />
 
@@ -198,7 +240,7 @@ export default function App() {
         isOpen={showOffer}
         onClose={() => setShowOffer(false)}
         profile={profile}
-        result={baseInferenceResult}
+        result={inferenceResult}
       />
 
       <WhatIfSimulatorModal
@@ -212,7 +254,7 @@ export default function App() {
         isOpen={showExport}
         onClose={() => setShowExport(false)}
         profile={profile}
-        result={baseInferenceResult}
+        result={inferenceResult}
       />
     </div>
   );

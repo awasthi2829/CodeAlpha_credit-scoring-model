@@ -1,5 +1,48 @@
 import { ApplicantProfile, InferenceResult, ShapFactor, CounterfactualScenario } from '../types/underwriting';
 
+const API_ENDPOINT = 'https://credit-scoring-model-m7xn.onrender.com/api/predict';
+
+/**
+ * Calculates credit risk by sending applicant vector to the live FastAPI / Scikit-Learn Random Forest backend.
+ * Automatically falls back to high-fidelity statistical local computation if network is offline.
+ */
+export async function fetchCreditRiskInference(
+  profile: ApplicantProfile,
+  underwriterName = 'E. Vance (Sr. Credit Officer, ID #4829)'
+): Promise<InferenceResult> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 7000); // 7s timeout
+
+    const response = await fetch(API_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ...profile,
+        underwriterName,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`API error code: ${response.status}`);
+    }
+
+    const data: InferenceResult = await response.json();
+    return data;
+  } catch (error) {
+    console.warn('FastAPI backend unreachable or timed out. Falling back to local scoring engine.', error);
+    return calculateCreditRisk(profile, underwriterName);
+  }
+}
+
+/**
+ * Local synchronous inference calculation (used for immediate What-If counterfactual slider updates & fallback).
+ */
 export function calculateCreditRisk(profile: ApplicantProfile, underwriterName = 'E. Vance (Sr. Credit Officer, ID #4829)'): InferenceResult {
   const BASELINE_P = 52.0;
 
@@ -118,55 +161,47 @@ export function calculateCreditRisk(profile: ApplicantProfile, underwriterName =
   let chkImpact = -4.3;
   let chkDesc = 'Absence of verified demand deposit relationship with institution';
   if (profile.checkingAccount === 'high') {
-    chkWeight = 0.128;
-    chkImpact = 10.2;
-    chkDesc = 'Substantial liquid buffer and salary credits (> 200 DM)';
+    chkWeight = 0.105;
+    chkImpact = 8.4;
+    chkDesc = 'Solid transactional cash balance exceeding 200 DM reserves';
   } else if (profile.checkingAccount === 'mid') {
-    chkWeight = -0.051;
-    chkImpact = -4.3;
-    chkDesc = 'Moderate checking liquidity balances (0 - 200 DM)';
+    chkWeight = 0.042;
+    chkImpact = 3.2;
+    chkDesc = 'Modest liquidity reserve (0 - 200 DM balance range)';
   } else if (profile.checkingAccount === 'neg') {
-    chkWeight = -0.178;
-    chkImpact = -14.2;
+    chkWeight = -0.106;
+    chkImpact = -8.5;
     chkDesc = 'Negative checking balance / persistent overdraft utilization';
-  } else {
-    chkWeight = -0.051;
-    chkImpact = -4.3;
-    chkDesc = 'Absence of verified demand deposit relationship with institution';
   }
 
   // 7. Installment Rate Burden Impact
-  let rateWeight = -0.022;
-  let rateImpact = -1.8;
-  let rateDesc = `Moderate ongoing monthly cash flow absorption (${profile.installmentRate}% Disposable Inc.)`;
-  if (profile.installmentRate <= 1) {
-    rateWeight = 0.024;
-    rateImpact = 1.9;
-    rateDesc = 'Minimal debt service strain (< 1% of monthly disposable)';
+  let rateWeight = -0.038;
+  let rateImpact = -2.4;
+  let rateDesc = `Installment commitment absorbs ${profile.installmentRate}% of disposable income`;
+  if (profile.installmentRate === 1) {
+    rateWeight = 0.052;
+    rateImpact = 4.2;
+    rateDesc = 'Low monthly debt servicing ratio (< 20% estimated burden)';
   } else if (profile.installmentRate === 2) {
-    rateWeight = 0.008;
-    rateImpact = 0.6;
-    rateDesc = 'Comfortable debt absorption capacity (2% disposable income)';
-  } else if (profile.installmentRate === 3) {
-    rateWeight = -0.022;
-    rateImpact = -1.8;
-    rateDesc = 'Moderate ongoing monthly cash flow absorption (3% Disposable Inc.)';
-  } else {
-    rateWeight = -0.056;
-    rateImpact = -4.5;
-    rateDesc = 'High debt service absorption ratio (4% disposable income)';
+    rateWeight = 0.021;
+    rateImpact = 1.8;
+    rateDesc = 'Manageable debt servicing ratio under conservative benchmarks';
+  } else if (profile.installmentRate === 4) {
+    rateWeight = -0.084;
+    rateImpact = -6.8;
+    rateDesc = 'High debt servicing ratio (> 35% estimated disposable drain)';
   }
 
-  // Savings bonus or drag
+  // Savings impact
   let savingsDelta = 0;
-  if (profile.savingsAccount === 'gt1000') savingsDelta = 3.2;
-  else if (profile.savingsAccount === '500-1000') savingsDelta = 2.0;
-  else if (profile.savingsAccount === '100-500') savingsDelta = 0.8;
-  else if (profile.savingsAccount === 'lt100') savingsDelta = -1.5;
+  if (profile.savingsAccount === 'gt1000') savingsDelta = 6.2;
+  else if (profile.savingsAccount === '500-1000') savingsDelta = 3.8;
+  else if (profile.savingsAccount === '100-500') savingsDelta = 1.4;
+  else if (profile.savingsAccount === 'lt100') savingsDelta = -3.2;
 
-  // Debtors / Guarantor bonus
+  // Debtors / Guarantor impact
   let debtorDelta = 0;
-  if (profile.debtors === 'guarantor') debtorDelta = 4.2;
+  if (profile.debtors === 'guarantor') debtorDelta = 5.2;
   else if (profile.debtors === 'co_applicant') debtorDelta = 3.5;
 
   // Credit amount scale penalty if unusually high
@@ -186,7 +221,6 @@ export function calculateCreditRisk(profile: ApplicantProfile, underwriterName =
   const probabilityGood = Math.round(probability * 100) / 100;
 
   // Credit Score calculation: Map 0-100% to 300-850 range
-  // P=52% maps to ~630, P=79.67% maps to ~742
   const creditScore = Math.round(300 + (probabilityGood / 100) * 550);
 
   // Determine Tier and Status
@@ -204,7 +238,7 @@ export function calculateCreditRisk(profile: ApplicantProfile, underwriterName =
     segment = 'Segment: DAX-B2C Tier A';
     lgd = 22.40;
     expectedLoss = Math.max(0.45, Math.round((1.12 - (probabilityGood - 79.67) * 0.04) * 100) / 100);
-  } else if (probabilityGood >= 65.0) {
+  } else if (probabilityGood >= 60.0) {
     tier = 'Moderate Risk Tier 2';
     statusBadge = 'Manual Review Required';
     verdict = 'Verdict: Conditional Approval';
