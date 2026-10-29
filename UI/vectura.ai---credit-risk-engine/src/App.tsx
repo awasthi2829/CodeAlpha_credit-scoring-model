@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
-import { Sidebar } from './components/Sidebar';
 import { IntakeScreen } from './components/IntakeScreen';
 import { AnalyticsScreen } from './components/AnalyticsScreen';
 import { PreferencesModal } from './components/PreferencesModal';
@@ -146,8 +145,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f9ff] dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-body transition-colors selection:bg-blue-600/15 selection:text-blue-600">
-      {/* Top Header */}
+    <div className="app-shell">
       <Header
         activeScreen={activeScreen}
         onNavigate={(screen) => setActiveScreen(screen)}
@@ -158,20 +156,8 @@ export default function App() {
         mobileMenuOpen={mobileMenuOpen}
       />
 
-      {/* Left Sidebar */}
-      <Sidebar
-        activeScreen={activeScreen}
-        onNavigate={(screen) => setActiveScreen(screen)}
-        onOpenDocs={() => setShowDocs(true)}
-        onOpenSimulator={() => setShowSimulator(true)}
-        mobileMenuOpen={mobileMenuOpen}
-        onCloseMobileMenu={() => setMobileMenuOpen(false)}
-      />
-
-      {/* Main Content Area */}
-      <div className="lg:pl-64">
-        <main className="pt-16 min-h-screen w-full px-4 sm:px-6 lg:px-8 py-6">
-          <div className="max-w-7xl mx-auto">
+      <main className="app-main">
+        <div className="app-container">
             {/* Guest Access Banner Notice if in Guest Mode */}
             {preferences.isGuest && (
               <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center justify-between text-xs text-amber-800 dark:text-amber-300">
@@ -210,9 +196,8 @@ export default function App() {
                 onExportMemo={() => setShowExport(true)}
               />
             )}
-          </div>
-        </main>
-      </div>
+        </div>
+      </main>
 
       {/* Modals & Dialogs */}
       <PreferencesModal
